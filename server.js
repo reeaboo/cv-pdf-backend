@@ -1,6 +1,12 @@
 /**
  * CV PDF Backend - Puppeteer + @sparticuz/chromium
- * Generates PDF with guaranteed top/bottom margins on every page
+ * 
+ * Approach: Use Puppeteer's margin option (works at PDF level)
+ * with 0 margin on the first page (CV's own design handles page 1)
+ * and 100px margin on subsequent pages.
+ * 
+ * Since Puppeteer doesn't support per-page margin natively,
+ * we use a hybrid CSS + margin approach.
  */
 
 const express = require('express');
@@ -27,18 +33,25 @@ async function getBrowser() {
   return browserPromise;
 }
 
-/* Pagination + margin enforcement CSS injected into every PDF.
-   Key trick: use @page margins (handled at PDF level, not browser level)
-   AND wrap content so the CV's own backgrounds don't fill the margins. */
+/* Pagination CSS:
+   - @page :first sets ZERO margin on page 1 (CV design fills the page)
+   - @page :not(:first) sets 100px top margin on page 2+ (breathing room)
+   - break-inside: avoid keeps sections together */
 const PAGINATION_CSS = `
-  /* Enforce 100px top/bottom margin on every printed page */
   @page {
     size: A4;
-    margin: 100px 0;
+    margin: 0;
   }
   
-  /* Override the CV's own fixed-height styling that prevents
-     proper multi-page flow */
+  @page :first {
+    margin: 0;
+  }
+  
+  @page :not(:first) {
+    margin-top: 100px;
+    margin-bottom: 100px;
+  }
+  
   html, body {
     margin: 0 !important;
     padding: 0 !important;
@@ -67,7 +80,6 @@ const PAGINATION_CSS = `
     page-break-inside: avoid !important;
   }
   
-  /* Print colors faithfully */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -100,9 +112,6 @@ app.post('/generate-pdf', async (req, res) => {
 
     await page.setContent(fullHTML, { waitUntil: 'networkidle0' });
 
-    // preferCSSPageSize: true makes Puppeteer respect the @page rule above
-    // (which sets margin: 100px 0). This is more reliable than the
-    // margin option in some content layouts.
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
