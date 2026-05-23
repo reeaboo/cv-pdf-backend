@@ -4,15 +4,15 @@
   "description": "PDF generation backend for CV builder using Puppeteer",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "postinstall": "puppeteer browsers install chrome"
+    "start": "node server.js"
   },
   "engines": {
     "node": "20.x"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^127.0.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
-    "puppeteer": "^22.15.0"
+    "puppeteer-core": "^22.15.0"
   }
 }
