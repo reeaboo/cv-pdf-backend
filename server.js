@@ -1,6 +1,6 @@
 /**
- * CV PDF Backend - Puppeteer + Express
- * Uses @sparticuz/chromium - a Chromium bundle for serverless/cloud environments
+ * CV PDF Backend - Puppeteer + @sparticuz/chromium
+ * Generates PDF with guaranteed top/bottom margins on every page
  */
 
 const express = require('express');
@@ -27,20 +27,47 @@ async function getBrowser() {
   return browserPromise;
 }
 
+/* Pagination + margin enforcement CSS injected into every PDF.
+   Key trick: use @page margins (handled at PDF level, not browser level)
+   AND wrap content so the CV's own backgrounds don't fill the margins. */
 const PAGINATION_CSS = `
+  /* Enforce 100px top/bottom margin on every printed page */
+  @page {
+    size: A4;
+    margin: 100px 0;
+  }
+  
+  /* Override the CV's own fixed-height styling that prevents
+     proper multi-page flow */
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+  
+  .cv, .cv.template-creative {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    page-break-after: auto !important;
+  }
+  
+  /* Sections never split mid-content */
   .item, .item-head, .experience-item, .education-item, .project-item,
   .reference-item, .skill-group {
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
+  
+  /* Section headings stay with first item below */
   h2, h3, .section-title {
-    break-after: avoid;
-    page-break-after: avoid;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
-  .sidebar {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
+  
+  /* Print colors faithfully */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -73,16 +100,13 @@ app.post('/generate-pdf', async (req, res) => {
 
     await page.setContent(fullHTML, { waitUntil: 'networkidle0' });
 
+    // preferCSSPageSize: true makes Puppeteer respect the @page rule above
+    // (which sets margin: 100px 0). This is more reliable than the
+    // margin option in some content layouts.
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: {
-        top: '100px',
-        bottom: '100px',
-        left: '0',
-        right: '0',
-      },
-      preferCSSPageSize: false,
+      preferCSSPageSize: true,
     });
 
     res.setHeader('Content-Type', 'application/pdf');
